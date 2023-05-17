@@ -74,7 +74,7 @@ spec:
     - name: scan-image
       params:
         - name: IMAGE_PATH
-          value: $(params.image_reference)
+          value: /workspace/manifest-dir/local/image.tar
         - name: ARGS
           value:
             - '$(params.trivy_args[*])'
