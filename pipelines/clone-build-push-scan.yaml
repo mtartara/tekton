@@ -1,0 +1,99 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: clone-build-push-scan
+  namespace: mtartara-test
+spec:
+  description: |
+    This pipeline clones a git repo, builds a Docker image with Kaniko and
+    pushes it to a registry
+  params:
+    - default: 'https://github.com/lvthillo/python-flask-docker'
+      name: repo_url
+      type: string
+    - default: >-
+        image-registry.openshift-image-registry.svc:5000/mtartara-test/flask-app:latest
+      name: image_reference
+      type: string
+    - default:
+        - image
+      name: trivy_args
+      type: array
+    - default:
+        - '--skip-tls-verify'
+        - '--tarPath=/workspace/source/local/image.tar'
+      name: kaniko_extra_args
+      type: array
+  tasks:
+    - name: fetch-source
+      params:
+        - name: url
+          value: $(params.repo_url)
+      taskRef:
+        kind: Task
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-data
+    - name: create-local-image-dir
+      runAfter:
+        - fetch-source
+      taskSpec:
+        metadata: {}
+        spec: null
+        steps:
+          - image: 'bash:4.4.23-alpine3.18'
+            name: mkdir
+            resources: {}
+            script: |
+              echo "Creating local-image dir ..."
+              mkdir /workspace/source/local
+              ls -lrth /workspace/source
+              echo "local-image dir created ..."
+        workspaces:
+          - name: source
+      workspaces:
+        - name: source
+          workspace: shared-data
+    - name: build-push
+      params:
+        - name: IMAGE
+          value: $(params.image_reference)
+        - name: EXTRA_ARGS
+          value:
+            - '$(params.kaniko_extra_args[*])'
+      runAfter:
+        - fetch-source
+        - create-local-image-dir
+      taskRef:
+        kind: Task
+        name: kaniko
+      workspaces:
+        - name: source
+          workspace: shared-data
+    - name: scan-image
+      params:
+        - name: IMAGE_PATH
+          value: $(params.image_reference)
+        - name: ARGS
+          value:
+            - '$(params.trivy_args[*])'
+      runAfter:
+        - build-push
+      taskRef:
+        kind: Task
+        name: trivy-scanner
+      workspaces:
+        - name: manifest-dir
+          workspace: shared-data
+    - name: cleanup-workspace
+      runAfter:
+        - scan-image
+      taskRef:
+        kind: Task
+        name: cleanup-workspace
+      workspaces:
+        - name: source
+          workspace: shared-data
+  workspaces:
+    - name: shared-data
