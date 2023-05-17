@@ -1,0 +1,26 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: cleanup-workspace
+  namespace: mtartara-test
+spec:
+  steps:
+    - image: alpine
+      name: verify1
+      resources: {}
+      script: |
+        ls -lrtha $(workspaces.source.path)
+    - image: alpine
+      name: cleanup
+      resources: {}
+      script: |
+        echo "Start clean workspace ...."
+        rm -rf $(workspaces.source.path)/*
+        echo "End clean workspace ...."
+    - image: alpine
+      name: verify2
+      resources: {}
+      script: |
+        ls -lrtha $(workspaces.source.path)
+  workspaces:
+    - name: source
